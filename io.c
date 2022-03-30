@@ -21,12 +21,25 @@ mnt *mnt_read(char *fname)
   CHECK(fscanf(f, "%f", &m->cellsize) == 1);
   CHECK(fscanf(f, "%f", &m->no_data) == 1);
 
-  CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
+  int nbColonnes = &m->ncols ;
+  int nbLignes = &m->nrows ;
 
-  for(int i = 0 ; i < m->ncols * m->nrows ; i++)
+
+  /* calcul ici */
+
+  CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
+  #pragma omp parallel
   {
-    CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
+    int numThreads = omp_get_num_threads();
+    
+    for(int i = 0 ; i < m->ncols * m->nrows ; i++)
+    {
+      CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
+    }
   }
+  
+    
+  
 
   CHECK(fclose(f) == 0);
   return(m);
