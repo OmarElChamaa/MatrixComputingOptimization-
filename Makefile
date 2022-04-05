@@ -6,7 +6,7 @@ LDFLAGS=$(CFLAGS)
 OBJ=$(patsubst %.c,%.o,$(wildcard *.c))
 
 all: main
-main: $(OBJ)
+main:$(OBJ)
 
 clean:
 	rm $(OBJ) main

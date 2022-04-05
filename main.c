@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "check.h"
 #include "type.h"
 #include "io.h"
 #include "darboux.h"
@@ -15,6 +16,9 @@ int main(int argc, char **argv)
     fprintf(stderr, "Usage: %s <input filename> [<output filename>]\n", argv[0]);
     exit(1);
   }
+
+  //INIT MPI 
+  MPI_Init(NULL,NULL);
 
   // READ INPUT
   m = mnt_read(argv[1]);
@@ -39,6 +43,6 @@ int main(int argc, char **argv)
   free(m);
   free(d->terrain);
   free(d);
-
+  MPI_Finalize();
   return(0);
 }

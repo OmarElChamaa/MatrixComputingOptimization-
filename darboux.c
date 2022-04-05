@@ -87,7 +87,7 @@ int calcul_Wij(float *restrict W, const float *restrict Wprec, const mnt *m, con
     // parcourir les 8 voisins haut/bas + gauche/droite
     for(int v=0; v<8; v++)
     {
-      const int n1 = i + VOISINS[v][0];
+      const int n1=  i + VOISINS[v][0];
       const int n2 = j + VOISINS[v][1];
 
       // vérifie qu'on ne sort pas de la grille.

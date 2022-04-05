@@ -1,7 +1,6 @@
 // fonctions d'entrée/sortie
 
 #include <stdio.h>
-
 #include "check.h"
 #include "type.h"
 #include "io.h"
@@ -13,7 +12,7 @@ mnt *mnt_read(char *fname)
 
   CHECK((m = malloc(sizeof(*m))) != NULL);
   CHECK((f = fopen(fname, "r")) != NULL);
-
+  //if rank == 0 do scans 
   CHECK(fscanf(f, "%d", &m->ncols) == 1);
   CHECK(fscanf(f, "%d", &m->nrows) == 1);
   CHECK(fscanf(f, "%f", &m->xllcorner) == 1);
@@ -23,24 +22,22 @@ mnt *mnt_read(char *fname)
 
   int nbColonnes = &m->ncols ;
   int nbLignes = &m->nrows ;
-
+  int nbproc = 0;
 
   /* calcul ici */
-
+  MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
+  printf("Nombre de processeurs : %d \n",nbproc);
+  
   CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
-  #pragma omp parallel
+  
+  int taille_chunk = m->nrows / nbproc ;
+  int reste = m->nrows%nbproc;
+  printf("Taille Chunk : %d \n , Taille Chunk Reste : %d \n",taille_chunk,reste);
+    
+  for(int i = 0 ; i < m->ncols * m->nrows ; i++)
   {
-    int numThreads = omp_get_num_threads();
-    
-    for(int i = 0 ; i < m->ncols * m->nrows ; i++)
-    {
-      CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
-    }
+    CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
   }
-  
-    
-  
-
   CHECK(fclose(f) == 0);
   return(m);
 }
