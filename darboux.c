@@ -135,6 +135,12 @@ int calcul_Wij(float *restrict W, const float *restrict Wprec, const mnt *m, con
 // applique l'algorithme de Darboux sur le MNT m, pour calculer un nouveau MNT
 mnt *darboux(const mnt *restrict m)
 {
+
+  int rank ; 
+  int nbproc; 
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
+  
   const int ncols = m->ncols, nrows = m->nrows;
 
   // initialisation
@@ -142,12 +148,53 @@ mnt *darboux(const mnt *restrict m)
   CHECK((W = malloc(ncols * nrows * sizeof(float))) != NULL);
   Wprec = init_W(m);
 
+  //On alloue une ou deux lignes supplémentaires, selon les lignes attribuées au processus
+  float *restrict Wtemp;
+  int nbl = ((rank == 1 || rank == nbproc-1) ? 1 : 2);
+  CHECK((Wtemp = malloc(ncols * nbl * sizeof(float))) != NULL);
+  
+  //Pointeur temporaire, utilisé pour l'envoi de ligne
+  float *restrict Wp = W; 
   // calcul : boucle principale
   int modif = 1;
   while(modif)
   {
+    //Envoi et réception des lignes 
+    
     modif = 0; // sera mis à 1 s'il y a une modification
 
+    //Récupération de la ligne supplémentaire nécessaire pour le calcul_Wij :
+    //On récupère la ligne suivante et on envoie la dernière ligne
+    if (rank == 1) {
+      //Déplacement du pointeur vers la dernière ligne 
+      Wp += ((m->nrows-1)*m->ncols);
+      //Envoi dernière ligne du proc 1 au proc 2
+      MPI_Ssend(Wp, m->ncols, MPI_FLOAT, 2, 0, MPI_COMM_WORLD);
+
+      //Réception de la ligne suivante par le proc 2
+      MPI_Recv(Wtemp, m->ncols, MPI_FLOAT, 2, 0, MPI_COMM_WORLD, NULL)  ;    
+    }
+    //On récupère la ligne précédente
+    else if (rank == nbproc - 1) {
+      //reception 
+      MPI_Recv(Wtemp , m->ncols , MPI_FLOAT , nbproc-2 , 0 , MPI_COMM_WORLD , NULL);
+      //envoie derniere ligne 
+      MPI_Ssend(W , m->ncols , MPI_FLOAT , nbproc-2 , 0 , MPI_COMM_WORLD );
+      
+    }
+    //On récupère la ligne précédente et suivante et on envoie la première et dernière ligne
+    else {
+      MPI_Recv(Wtemp , m->ncols , MPI_FLOAT , rank-1 , 0 , MPI_COMM_WORLD , NULL);
+
+      MPI_Ssend(Wp , m->ncols , MPI_FLOAT , rank-1 , 0 , MPI_COMM_WORLD);
+      
+      //Déplacement du pointeur vers la dernière ligne 
+      Wp += ((m->nrows-1)*m->ncols);
+
+      MPI_Ssend(W , m->ncols , MPI_FLOAT , rank+1 , 0 , MPI_COMM_WORLD);
+
+      MPI_Recv(Wtemp , m->ncols , MPI_FLOAT , rank+1 , 0 , MPI_COMM_WORLD , NULL);
+    }
     // calcule le nouveau W fonction de l'ancien (Wprec) en chaque point [i,j]
     for(int i=0; i<nrows; i++)
     {

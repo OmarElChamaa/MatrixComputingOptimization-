@@ -50,7 +50,7 @@ mnt *mnt_read(char *fname)
     taille_chunk = m->ncols  / nbproc ;
     reste = m->ncols  % nbproc;
     
-    printf("Taille Chunk : %d \n , Taille Chunk Reste : %d \n",taille_chunk,reste);
+    //printf("Taille Chunk : %d \n , Taille Chunk Reste : %d \n",taille_chunk,reste);
 
     for(int i = 0 ; i < m->ncols * m->nrows ; i++)
     {
@@ -69,7 +69,7 @@ mnt *mnt_read(char *fname)
   if (rank){
     m->nrows = taille_chunk + (rank <= reste ? 1 : 0);
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
-    printf("nb de val dans terrain %i : %i \n", rank, m->ncols*m->nrows);
+    //printf("nb de val dans terrain %i : %i \n", rank, m->ncols*m->nrows);
   }
   
 //Envoi et réception des valeurs du terrain aux processus
@@ -78,28 +78,27 @@ mnt *mnt_read(char *fname)
     for (int i = 1; i<nbproc; i++) {
       int count_send = taille_chunk * m->ncols;
       count_send += (i <= reste ? m->ncols : 0);
-      printf("count send is %i for proc %i \n",count_send,i);
+      //printf("count send is %i for proc %i \n",count_send,i);
       
       MPI_Send(temp, count_send, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
       temp=(temp + count_send);
     }
-    sleep(2);
   }
   else{
     //Les processus de rang reste ou moins traiteront une ligne de plus, si nbRows % nbProc != 0
     taille_chunk += (reste >= rank ? 1 : 0); 
-    printf("taille_chunk = %i, nbrows = %i  rank = %i \n", taille_chunk, m->nrows,rank);
+    //printf("taille_chunk = %i, nbrows = %i  rank = %i \n", taille_chunk, m->nrows,rank);
     MPI_Recv(m->terrain , taille_chunk *  m->ncols , MPI_FLOAT , 0 , 0 , MPI_COMM_WORLD , NULL);
   }
-  for(int i = 0 ; i < nbproc ; i++){
-    if(rank == i){
-      printTerrain(m,rank);
-    }
-    else{
-      sleep(2);
-    }
+  // for(int i = 0 ; i < nbproc ; i++){
+  //   if(rank == i){
+  //     printTerrain(m,rank);
+  //   }
+  //   else{
+  //     sleep(2);
+  //   }
     
-  }
+  // }
   return(m);
 }
 

@@ -17,8 +17,15 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+
+
   //INIT MPI 
   MPI_Init(NULL,NULL);
+
+  int rank ; 
+  int nbproc = 0; 
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
 
   // READ INPUT
   m = mnt_read(argv[1]);
@@ -27,16 +34,19 @@ int main(int argc, char **argv)
   d = darboux(m);
 
   // WRITE OUTPUT
-  FILE *out;
-  if(argc == 3)
-    out = fopen(argv[2], "w");
-  else
-    out = stdout;
-  mnt_write(d, out);
-  if(argc == 3)
-    fclose(out);
-  else
-    mnt_write_lakes(m, d, stdout);
+  
+      FILE *out;
+    if(argc == 3)
+      out = fopen(argv[2], "w");
+    else
+      out = stdout;
+    mnt_write(d, out);
+    if(argc == 3)
+      fclose(out);
+    else
+      mnt_write_lakes(m, d, stdout);
+  
+  
 
   // free
   free(m->terrain);
