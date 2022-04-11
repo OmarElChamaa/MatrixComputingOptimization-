@@ -24,7 +24,7 @@ int main(int argc, char **argv)
   m = mnt_read(argv[1]);
 
   // COMPUTE
-  d = darboux(m);
+ // d = darboux(m);
 
   // WRITE OUTPUT
   FILE *out;

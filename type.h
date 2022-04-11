@@ -1,6 +1,7 @@
 
 #include <omp.h>
 #include <mpi.h>
+#include <unistd.h>
 // structure de données principale
 #ifndef __TYPE_H__
 #define __TYPE_H__
