@@ -47,11 +47,8 @@ mnt *mnt_read(char *fname)
   
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
     
-    taille_chunk = m->ncols  / nbproc ;
-    reste = m->ncols  % nbproc;
-    
-    //printf("Taille Chunk : %d \n , Taille Chunk Reste : %d \n",taille_chunk,reste);
-
+    taille_chunk = m->nrows  / nbproc ;
+    reste = m->nrows  % nbproc;
     for(int i = 0 ; i < m->ncols * m->nrows ; i++)
     {
       CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
@@ -71,7 +68,7 @@ mnt *mnt_read(char *fname)
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
     //printf("nb de val dans terrain %i : %i \n", rank, m->ncols*m->nrows);
   }
-  
+  printf("%i:%irows",rank, m->nrows);
 //Envoi et réception des valeurs du terrain aux processus
   if (!rank) {
     float *temp = m->terrain;

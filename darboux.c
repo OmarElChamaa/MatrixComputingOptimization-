@@ -25,7 +25,7 @@ float max_terrain(const mnt *restrict m)
   return(max);
 }
 
-// initialise le tableau W de départ à partir d'un mnt m
+// initialise le tableau W de départ à partir d'un mnt
 float *init_W(const mnt *restrict m)
 {
   const int ncols = m->ncols, nrows = m->nrows;
@@ -44,6 +44,63 @@ float *init_W(const mnt *restrict m)
         WTERRAIN(W,i,j) = max;
     }
   }
+
+  return(W);
+}
+
+// initialise le tableau W de départ à partir d'un mnt, en ajoutant une ligne vide avant et après les données de m
+float *init_W_kernel(const mnt *restrict m){
+  
+  float *restrict W;
+  const int ncols = m->ncols ; 
+  const int nrows = m->nrows + 2 ; 
+  CHECK((W = malloc( ncols * nrows * sizeof(float))) != NULL);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  int nbproc ; 
+  MPI_Comm_size(MPI_COMM_WORLD, &nbproc); 
+
+  const float max = max_terrain(m) + 10.;
+
+  //traitement différent selon le processus, pour respecter la "bordure" de W initial
+  if (rank == 1) {
+      for(int i = 1 ; i < nrows - 1; i++)
+      {
+        for(int j = 0 ; j < ncols ; j++)
+        {
+          if(i==1 || j==0||  j==ncols-1 || TERRAIN(m,i,j) == m->no_data){
+            WTERRAIN(W,i,j) = TERRAIN(m,i,j);
+          } 
+          else
+            WTERRAIN(W,i,j) = max;
+        }
+      }
+    }
+    else if (rank == nbproc - 1) {
+      for(int i = 1; i < nrows-1; i++)
+      {
+        for(int j = 0 ; j < ncols ; j++)
+        {
+          if(i==nrows-2 || j==0||  j==ncols-1 || TERRAIN(m,i,j) == m->no_data)
+            WTERRAIN(W,i,j) = TERRAIN(m,i,j);
+          else
+            WTERRAIN(W,i,j) = max;
+        }
+      }
+    }
+    else {
+     for(int i = 1; i < nrows-1; i++)
+      {
+        for(int j = 0 ; j < ncols ; j++)
+        {
+          if(j==0||  j==ncols-1 || TERRAIN(m,i,j) == m->no_data)
+            WTERRAIN(W,i,j) = TERRAIN(m,i,j);
+          else
+            WTERRAIN(W,i,j) = max;
+        }
+      }
+    }
 
   return(W);
 }
@@ -76,6 +133,12 @@ const int VOISINS[8][2] = {{-1,-1}, {-1,0}, {-1,1}, {0,-1}, {0,1}, {1,-1}, {1,0}
 // inutile de modifier cette fonction (elle est sensible...):
 int calcul_Wij(float *restrict W, const float *restrict Wprec, const mnt *m, const int i, const int j)
 {
+  
+  int rank ; 
+  int nbproc; 
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
+
   const int nrows = m->nrows, ncols = m->ncols;
   int modif = 0;
 
@@ -88,6 +151,7 @@ int calcul_Wij(float *restrict W, const float *restrict Wprec, const mnt *m, con
     for(int v=0; v<8; v++)
     {
       const int n1=  i + VOISINS[v][0];
+      //printf("n1 est %i et nrows %i proc %i  \n",n1,nrows,rank);
       const int n2 = j + VOISINS[v][1];
 
       // vérifie qu'on ne sort pas de la grille.
@@ -129,94 +193,167 @@ int calcul_Wij(float *restrict W, const float *restrict Wprec, const mnt *m, con
   return(modif);
 }
 
+
+// if (rank ==  nbproc - 1) {
+//         //Envoi de la première ligne 
+//         Wp += ncols;
+//         //Envoi dernière ligne du proc 1 au proc 2
+//         MPI_Ssend(Wp, ncols, MPI_FLOAT, nbproc-2, 0, MPI_COMM_WORLD);
+        
+//         //Réception de la ligne suivante par le proc 2, après avoir calculé cette dernière
+//         Wp += (nrows-2)*ncols;
+//         MPI_Recv(Wp ,ncols, MPI_FLOAT, 2, 0, MPI_COMM_WORLD, NULL)  ;    
+//       }
+//       //On récupère la ligne précédente
+//       else if (rank == 0) {
+//         //réception ligne précédente                                                                                          
+//         MPI_Recv(Wprec , ncols ,MPI_FLOAT , nbproc-2 , 0 , MPI_COMM_WORLD , NULL);
+//         //envoie première ligne 
+//         Wp += ncols ;
+//         MPI_Ssend(Wp, ncols , MPI_FLOAT , nbproc-2 , 0 , MPI_COMM_WORLD );
+//       }
+//       //On récupère la ligne précédente et suivante et on envoie la première et dernière ligne
+//       else {
+//         MPI_Recv(Wprec , ncols , MPI_FLOAT , rank+1 , 0 , MPI_COMM_WORLD , NULL);
+
+//         Wprec += ncols;
+//         for(int i=0 ; i < nrows-2 ;  i++)
+//         {
+//           for(int j=0; j<ncols; j++)
+//           {
+//             // calcule la nouvelle valeur de W[i,j]
+//             // en utilisant les 8 voisins de la position [i,j] du tableau Wprec
+//             //printf("Mon nombre de lignes : %i et colonnes : %i Proc %i \n",m->nrows,m->ncols,rank);
+//             localModif |= calcul_Wij(W, Wprec, m, i, j);
+//           }
+//           Wp += ncols;
+//           //Envoi de la ligne
+//           MPI_Ssend(Wp , ncols , MPI_FLOAT , rank-1 , 0 , MPI_COMM_WORLD);  
+//         }
+      
+//         //Déplacement du pointeur vers la dernière ligne        
+//         Wp += ((nrows-3)*ncols);
+//         MPI_Ssend(Wp , ncols , MPI_FLOAT , rank+1 , 0 , MPI_COMM_WORLD);
+        
+//         //deplacement du pointeur a la derniere ligne 
+//         Wp += ncols;
+//         MPI_Recv(Wp , ncols , MPI_FLOAT , rank-1 , 0 , MPI_COMM_WORLD , NULL);
+//       }
+
+
+void printW(float *w,int nrows, int ncols, int rank){
+  printf("*********** %i ***********\n", rank);
+  for(int i = 0 ; i < nrows; i++){
+      for(int j = 0 ; j < ncols ; j++){
+        printf("||%f||",WTERRAIN(w,i,j));
+      }
+      printf("\n");  
+    }
+
+    printf("*********** /%i ************\n",rank);  
+    printf("\n\n");
+}
+
+
 /*****************************************************************************/
 /*           Fonction de calcul principale - À PARALLÉLISER                  */
 /*****************************************************************************/
 // applique l'algorithme de Darboux sur le MNT m, pour calculer un nouveau MNT
 mnt *darboux(const mnt *restrict m)
-{
+{ 
 
   int rank ; 
   int nbproc; 
+  int localModif ; 
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
-  
-  const int ncols = m->ncols, nrows = m->nrows;
+
+  //nrows correspond à la longueur de W, avec les 2 lignes supplémentaires inclus
+  const int ncols = m->ncols, nrows = m->nrows + 2;
 
   // initialisation
   float *restrict W, *restrict Wprec;
-  CHECK((W = malloc(ncols * nrows * sizeof(float))) != NULL);
-  Wprec = init_W(m);
+  //On initialise W et Wprec avec 2 lignes supplémentaires, qui sont celles des processus suivant et précédant
+  CHECK((W = malloc(ncols  * nrows * sizeof(float))) != NULL);  
 
-  //On alloue une ou deux lignes supplémentaires, selon les lignes attribuées au processus
-  float *restrict Wtemp;
-  int nbl = ((rank == 1 || rank == nbproc-1) ? 1 : 2);
-  CHECK((Wtemp = malloc(ncols * nbl * sizeof(float))) != NULL);
-  
+  Wprec = init_W_kernel(m);
+  printW(Wprec,ncols,nrows -2 ,rank);
+
   //Pointeur temporaire, utilisé pour l'envoi de ligne
-  float *restrict Wp = W; 
+  float *restrict Wp; 
+  
   // calcul : boucle principale
-  int modif = 1;
-  while(modif)
-  {
-    //Envoi et réception des lignes 
-    
-    modif = 0; // sera mis à 1 s'il y a une modification
+  int modif = 1;  
 
-    //Récupération de la ligne supplémentaire nécessaire pour le calcul_Wij :
-    //On récupère la ligne suivante et on envoie la dernière ligne
-    if (rank == 1) {
-      //Déplacement du pointeur vers la dernière ligne 
-      Wp += ((m->nrows-1)*m->ncols);
-      //Envoi dernière ligne du proc 1 au proc 2
-      MPI_Ssend(Wp, m->ncols, MPI_FLOAT, 2, 0, MPI_COMM_WORLD);
-
-      //Réception de la ligne suivante par le proc 2
-      MPI_Recv(Wtemp, m->ncols, MPI_FLOAT, 2, 0, MPI_COMM_WORLD, NULL)  ;    
-    }
-    //On récupère la ligne précédente
-    else if (rank == nbproc - 1) {
-      //reception 
-      MPI_Recv(Wtemp , m->ncols , MPI_FLOAT , nbproc-2 , 0 , MPI_COMM_WORLD , NULL);
-      //envoie derniere ligne 
-      MPI_Ssend(W , m->ncols , MPI_FLOAT , nbproc-2 , 0 , MPI_COMM_WORLD );
-      
-    }
-    //On récupère la ligne précédente et suivante et on envoie la première et dernière ligne
-    else {
-      MPI_Recv(Wtemp , m->ncols , MPI_FLOAT , rank-1 , 0 , MPI_COMM_WORLD , NULL);
-
-      MPI_Ssend(Wp , m->ncols , MPI_FLOAT , rank-1 , 0 , MPI_COMM_WORLD);
-      
-      //Déplacement du pointeur vers la dernière ligne 
-      Wp += ((m->nrows-1)*m->ncols);
-
-      MPI_Ssend(W , m->ncols , MPI_FLOAT , rank+1 , 0 , MPI_COMM_WORLD);
-
-      MPI_Recv(Wtemp , m->ncols , MPI_FLOAT , rank+1 , 0 , MPI_COMM_WORLD , NULL);
-    }
-    // calcule le nouveau W fonction de l'ancien (Wprec) en chaque point [i,j]
-    for(int i=0; i<nrows; i++)
+  if(rank!=0){
+    while(modif)
     {
-      for(int j=0; j<ncols; j++)
-      {
-        // calcule la nouvelle valeur de W[i,j]
-        // en utilisant les 8 voisins de la position [i,j] du tableau Wprec
-        modif |= calcul_Wij(W, Wprec, m, i, j);
+      Wp = Wprec;
+      modif = 0; // sera mis à 1 s'il y a une modification
+      localModif = 0;
+
+      //1er : envoi de sa première ligne au précédant (sauf p = 1)
+      //2eme : réception de sa ligne suivante, non calculée (sauf p = n - 1)
+      //3eme : réception de sa ligne précédante, calculée (sauf p = 1)
+      //4eme : calcul jusqu'a dernière ligne 
+      //5eme : envoi de sa dernière ligne au suivant (sauf p = n - 1)
+      
+      //Déplacement du pointeur à la 1ère ligne
+      Wp += ncols;    
+      if (rank != 1) {
+        MPI_Ssend(Wp, ncols, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD);
+        printf("%i->%i\n",rank, rank-1);
       }
+
+      Wp += ncols*(nrows-2);
+      if (rank != nbproc - 1){
+        MPI_Recv(Wp ,ncols, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD, NULL);
+        printf("%i<-%i\n",rank,rank+1);
+      }
+        
+      
+      Wp -= ncols * (nrows-1);
+      if(rank != 1){
+        MPI_Recv(Wp ,ncols, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, NULL);
+        printf("recv 2 %i<-%i\n",rank,rank-1);
+      }        
+
+      Wprec += 1;
+      for(int i=0 ; i < nrows-2 ;  i++)
+      {
+        for(int j=0; j<ncols; j++)
+        {
+          // calcule la nouvelle valeur de W[i,j]
+          // en utilisant les 8 voisins de la position [i,j] du tableau Wprec
+          //printf("Mon nombre de lignes : %i et colonnes : %i Proc %i \n",m->nrows,m->ncols,rank);
+          localModif |= calcul_Wij(W, Wprec, m, i, j);
+        }
+      }
+      Wprec -= 1; 
+      
+      Wp += ncols * (nrows - 2);
+      if (rank != nbproc - 1){
+        MPI_Ssend(Wp, ncols, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD);
+        printf("%i->%i\n",rank, rank-1);
+      }
+        
+      
+      #ifdef DARBOUX_PPRINTT
+      printf("Je suis le proc %i est je print : \n",rank);
+      dpprint();
+      #endif
+
+      // échange W et Wprec
+      // sans faire de copie mémoire : échange les pointeurs sur les deux tableaux
+      float *tmp = W;
+      W = Wprec;
+      Wprec = tmp;
+      //Réduction de la variable modif et envoie aux autres processus
+      MPI_Reduce(&localModif,&modif, 1, MPI_INT,MPI_SUM, 0, MPI_COMM_WORLD) ; 
+      MPI_Bcast(&modif, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
-
-    #ifdef DARBOUX_PPRINT
-    dpprint();
-    #endif
-
-    // échange W et Wprec
-    // sans faire de copie mémoire : échange les pointeurs sur les deux tableaux
-    float *tmp = W;
-    W = Wprec;
-    Wprec = tmp;
   }
-  // fin du while principal
+   // fin du while principal
 
 
   // fin du calcul, le résultat se trouve dans W

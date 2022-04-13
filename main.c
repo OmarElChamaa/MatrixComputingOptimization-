@@ -20,7 +20,7 @@ int main(int argc, char **argv)
 
 
   //INIT MPI 
-  MPI_Init(NULL,NULL);
+  MPI_Init(&argc,&argv);
 
   int rank ; 
   int nbproc = 0; 
@@ -31,6 +31,7 @@ int main(int argc, char **argv)
   m = mnt_read(argv[1]);
 
   // COMPUTE
+  
   d = darboux(m);
 
   // WRITE OUTPUT
