@@ -10,6 +10,8 @@
 void printTerrain (mnt *m, int r){
   for (int i = 0 ; i< m->nrows*m->ncols ; i++){
     printf(" %f ",m->terrain[i]);
+    if (!i%m->ncols)
+      printf("\n"); 
   }
   
     printf("\n***************************************** Je suis le p %d\n",r);
@@ -21,7 +23,7 @@ mnt *mnt_read(char *fname)
 {
   mnt *m;
   CHECK((m = malloc(sizeof(*m))) != NULL);
-  int taille_chunk= 0;
+  int taille_chunk = 0;
   int reste = 0;
   int rank ; 
   int nbproc = 0; 
@@ -47,8 +49,8 @@ mnt *mnt_read(char *fname)
   
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
     
-    taille_chunk = m->nrows  / nbproc ;
-    reste = m->nrows  % nbproc;
+    taille_chunk = m->nrows  / (nbproc-1) ;
+    reste = m->nrows  % (nbproc-1) ;
     for(int i = 0 ; i < m->ncols * m->nrows ; i++)
     {
       CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
@@ -68,8 +70,8 @@ mnt *mnt_read(char *fname)
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
     //printf("nb de val dans terrain %i : %i \n", rank, m->ncols*m->nrows);
   }
-  printf("%i:%irows",rank, m->nrows);
-//Envoi et réception des valeurs du terrain aux processus
+
+  //Envoi et réception des valeurs du terrain aux processus
   if (!rank) {
     float *temp = m->terrain;
     for (int i = 1; i<nbproc; i++) {
@@ -78,7 +80,7 @@ mnt *mnt_read(char *fname)
       //printf("count send is %i for proc %i \n",count_send,i);
       
       MPI_Send(temp, count_send, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
-      temp=(temp + count_send);
+      temp += count_send;
     }
   }
   else{
@@ -86,17 +88,30 @@ mnt *mnt_read(char *fname)
     taille_chunk += (reste >= rank ? 1 : 0); 
     //printf("taille_chunk = %i, nbrows = %i  rank = %i \n", taille_chunk, m->nrows,rank);
     MPI_Recv(m->terrain , taille_chunk *  m->ncols , MPI_FLOAT , 0 , 0 , MPI_COMM_WORLD , NULL);
-  }
-  // for(int i = 0 ; i < nbproc ; i++){
-  //   if(rank == i){
-  //     printTerrain(m,rank);
-  //   }
-  //   else{
-  //     sleep(2);
-  //   }
-    
-  // }
+  } 
+  
   return(m);
+}
+
+void sendToMaster(float * W, int ncols , int  nrows){
+  int rank ; 
+  int nbproc = 0; 
+  
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
+
+  float *  Wp = W  ;
+
+
+  for(int i = 1 ; i < nbproc ; i++ ){
+    if(rank == i){
+      Wp +=1 ;
+      MPI_Ssend(Wp, (nrows-1)*ncols, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+    }else if(rank == 0){
+      MPI_Recv(Wp ,(nrows-1)*ncols, MPI_FLOAT, i, 0, MPI_COMM_WORLD, NULL);
+      Wp+=2;
+    }
+  }
 }
 
 void mnt_write(mnt *m, FILE *f)
