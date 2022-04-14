@@ -89,7 +89,9 @@ mnt *mnt_read(char *fname)
     //printf("taille_chunk = %i, nbrows = %i  rank = %i \n", taille_chunk, m->nrows,rank);
     MPI_Recv(m->terrain , taille_chunk *  m->ncols , MPI_FLOAT , 0 , 0 , MPI_COMM_WORLD , NULL);
   } 
-  
+  // if (rank==0){
+  //   printTerrain(m,rank);
+  // }
   return(m);
 }
 

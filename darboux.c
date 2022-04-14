@@ -54,7 +54,7 @@ float *init_W_kernel(const mnt *restrict m, float gmax){
   float *restrict W;
   const int ncols = m->ncols ; 
   const int nrows = m->nrows + 2 ; 
-  CHECK((W = malloc( ncols * nrows * sizeof(float))) != NULL);
+  CHECK((W = calloc( ncols * nrows ,  sizeof(float))) != NULL);
   
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -70,8 +70,8 @@ float *init_W_kernel(const mnt *restrict m, float gmax){
       {
         for(int j = 0 ; j < ncols ; j++)
         {
-          if(i==1 || j==0||  j==ncols-1 || TERRAIN(m,i,j) == m->no_data){
-            WTERRAIN(W,i,j) = TERRAIN(m,i,j);
+          if(i==1 || j==0||  j==ncols-1 || TERRAIN(m,i-1,j) == m->no_data){
+            WTERRAIN(W,i,j) = TERRAIN(m,i-1,j);
           } 
           else
             WTERRAIN(W,i,j) = max;
@@ -83,8 +83,8 @@ float *init_W_kernel(const mnt *restrict m, float gmax){
       {
         for(int j = 0 ; j < ncols ; j++)
         {
-          if(i==nrows-2 || j==0||  j==ncols-1 || TERRAIN(m,i,j) == m->no_data)
-            WTERRAIN(W,i,j) = TERRAIN(m,i,j);
+          if(i==nrows-2 || j==0||  j==ncols-1 || TERRAIN(m,i-1,j) == m->no_data)
+            WTERRAIN(W,i,j) = TERRAIN(m,i-1,j);
           else
             WTERRAIN(W,i,j) = max;
         }
@@ -95,8 +95,8 @@ float *init_W_kernel(const mnt *restrict m, float gmax){
       {
         for(int j = 0 ; j < ncols ; j++)
         {
-          if(j==0||  j==ncols-1 || TERRAIN(m,i,j) == m->no_data)
-            WTERRAIN(W,i,j) = TERRAIN(m,i,j);
+          if(j==0||  j==ncols-1 || TERRAIN(m,i-1,j) == m->no_data)
+            WTERRAIN(W,i,j) = TERRAIN(m,i-1,j);
           else
             WTERRAIN(W,i,j) = max;
         }
@@ -300,6 +300,9 @@ mnt *darboux(const mnt *restrict m)
   // calcul : boucle principale
   int modif = 1;  
 
+
+  if(rank)
+    printW(Wprec, nrows, ncols, rank, rank);
   if(rank){
     while(modif)
     {
@@ -317,13 +320,18 @@ mnt *darboux(const mnt *restrict m)
       Wp += ncols;    
       if (rank != 1) {
         MPI_Ssend(Wp, ncols, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD);
-        printf("%i->%i\n",rank, rank-1);
+        printf("%i->%i\n",rank, rank-1);  
       }
 
       Wp += ncols*(nrows-2);
       if (rank != nbproc - 1){
         MPI_Recv(Wp ,ncols, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD, NULL);
         printf("%i<-%i\n",rank,rank+1);
+        if(rank==2){
+          printW(Wp,1,ncols,rank,1);
+          printW(Wprec,nrows,ncols,rank,1);
+        }
+        
       }
         
       
@@ -333,11 +341,11 @@ mnt *darboux(const mnt *restrict m)
         printf("%i<-%i\n",rank,rank-1);
       }        
 
-      Wprec += ncols;
-      W += ncols;
+      Wprec += ncols ;
+      W += ncols ;
       for(int i=0 ; i < nrows-2;  i++)
       {
-        for(int j=0; j<ncols; j++)
+        for(int j=0; j < ncols; j++)
         {
           // calcule la nouvelle valeur de W[i,j]
           // en utilisant les 8 voisins de la position [i,j] du tableau Wprec
