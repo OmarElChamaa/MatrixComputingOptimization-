@@ -34,9 +34,10 @@ int main(int argc, char **argv)
   
   d = darboux(m);
 
-  // WRITE OUTPUT
   
-      FILE *out;
+  // WRITE OUTPUT
+   if (rank){
+     FILE *out;
     if(argc == 3)
       out = fopen(argv[2], "w");
     else
@@ -46,7 +47,11 @@ int main(int argc, char **argv)
       fclose(out);
     else
       mnt_write_lakes(m, d, stdout);
-  
+   }
+      
+
+
+    
   
 
   // free

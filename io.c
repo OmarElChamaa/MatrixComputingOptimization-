@@ -30,19 +30,15 @@ mnt *mnt_read(char *fname)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
   
- 
-  
   if(rank==0){
     FILE *f;
     CHECK((f = fopen(fname, "r")) != NULL);
-    //if rank == 0 do scans 
     CHECK(fscanf(f, "%d", &m->ncols) == 1);
     CHECK(fscanf(f, "%d", &m->nrows) == 1);
     CHECK(fscanf(f, "%f", &m->xllcorner) == 1);
     CHECK(fscanf(f, "%f", &m->yllcorner) == 1);
     CHECK(fscanf(f, "%f", &m->cellsize) == 1);
     CHECK(fscanf(f, "%f", &m->no_data) == 1);
-    printf("Nombre de processeurs : %d \n",nbproc);
 
     /* calcul ici */
   
@@ -66,9 +62,9 @@ mnt *mnt_read(char *fname)
   
   //Définition du nombre de lignes à traiter par le processus courant, autre que le processus 0
   if (rank){
-    m->nrows = taille_chunk + (rank <= reste ? 1 : 0);
+    m->nrows = taille_chunk + (rank <= reste ? 1 : 0) + 2 ;
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
-    //printf("nb de val dans terrain %i : %i \n", rank, m->ncols*m->nrows);
+    printf("%i rows dans p%i\n", m->nrows, rank);
   }
 
   //Envoi et réception des valeurs du terrain aux processus
@@ -77,7 +73,6 @@ mnt *mnt_read(char *fname)
     for (int i = 1; i<nbproc; i++) {
       int count_send = taille_chunk * m->ncols;
       count_send += (i <= reste ? m->ncols : 0);
-      //printf("count send is %i for proc %i \n",count_send,i);
       
       MPI_Send(temp, count_send, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
       temp += count_send;
@@ -86,35 +81,36 @@ mnt *mnt_read(char *fname)
   else{
     //Les processus de rang reste ou moins traiteront une ligne de plus, si nbRows % nbProc != 0
     taille_chunk += (reste >= rank ? 1 : 0); 
-    //printf("taille_chunk = %i, nbrows = %i  rank = %i \n", taille_chunk, m->nrows,rank);
     MPI_Recv(m->terrain , taille_chunk *  m->ncols , MPI_FLOAT , 0 , 0 , MPI_COMM_WORLD , NULL);
   } 
-  // if (rank==0){
-  //   printTerrain(m,rank);
-  // }
+
   return(m);
 }
 
-void sendToMaster(float * W, int ncols , int  nrows){
-  int rank ; 
-  int nbproc = 0; 
+// void sendToMaster(float * W, int  nrows , mnt *m ){
+//   int rank ; 
+//   int nbproc = 0; 
   
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
+//   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//   MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
 
-  float *  Wp = W  ;
+  
 
-
-  for(int i = 1 ; i < nbproc ; i++ ){
-    if(rank == i){
-      Wp +=1 ;
-      MPI_Ssend(Wp, (nrows-1)*ncols, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-    }else if(rank == 0){
-      MPI_Recv(Wp ,(nrows-1)*ncols, MPI_FLOAT, i, 0, MPI_COMM_WORLD, NULL);
-      Wp+=2;
-    }
-  }
-}
+//   float *  Wp = W  ;
+//   if(!rank){
+//     for(int i = 0 ; i < nbproc -1 ; i ++){
+//       int taille_chunk = m->nrows  / (nbproc-1) ;
+//       int reste = m->nrows  % (nbproc-1) ;
+//       taille_chunk += (reste >= i ? 1 : 0);
+//       nrows += taille_chunk;
+//       MPI_Recv(Wp ,(nrows)*m->ncols, MPI_FLOAT, i, 0, MPI_COMM_WORLD, NULL);
+//       Wp+=2;
+//     } 
+//   }else{
+//     Wp +=1 ;
+//     MPI_Ssend(Wp, (m->nrows-2)*m->ncols, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+//   }     
+// }
 
 void mnt_write(mnt *m, FILE *f)
 {
