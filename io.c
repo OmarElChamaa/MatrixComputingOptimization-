@@ -46,7 +46,7 @@ mnt *mnt_read(char *fname)
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
     
     taille_chunk = m->nrows  / (nbproc-1) ;
-    reste = m->nrows  % (nbproc-1) ;
+    reste = m->nrows  % (nbproc-1) ;  
     for(int i = 0 ; i < m->ncols * m->nrows ; i++)
     {
       CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
@@ -56,61 +56,37 @@ mnt *mnt_read(char *fname)
   // Transfert de la valeur du chunk aux autres, ainsi que no_data, ncols
   MPI_Bcast(&taille_chunk, 1, MPI_INT, 0, MPI_COMM_WORLD);
   MPI_Bcast(&reste , 1 , MPI_INT , 0 , MPI_COMM_WORLD);
-  MPI_Bcast(&m->no_data , 1 , MPI_INT , 0 , MPI_COMM_WORLD);
+  MPI_Bcast(&m->no_data , 1 , MPI_INT , 0 , MPI_COMM_WORLD);  
   MPI_Bcast(&m->ncols , 1 , MPI_INT , 0 , MPI_COMM_WORLD);
-
   
   //Définition du nombre de lignes à traiter par le processus courant, autre que le processus 0
   if (rank){
-    m->nrows = taille_chunk + (rank <= reste ? 1 : 0) + 2 ;
+    m->nrows = taille_chunk + (rank <= reste ? 1 : 0) ;
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
-    printf("%i rows dans p%i\n", m->nrows, rank);
+    //printf("%i rows dans p%i\n", m->nrows, rank);
   }
 
-  //Envoi et réception des valeurs du terrain aux processus
+
+  //Préparation du scatter des données de m->terrrain
+  int* count_send = malloc(nbproc*sizeof(int));
+  int* displacements = malloc(nbproc*sizeof(int));
+  count_send[0] = 0;
+  displacements[0] = 0;
   if (!rank) {
-    float *temp = m->terrain;
-    for (int i = 1; i<nbproc; i++) {
-      int count_send = taille_chunk * m->ncols;
-      count_send += (i <= reste ? m->ncols : 0);
-      
-      MPI_Send(temp, count_send, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
-      temp += count_send;
+    for (int i = 1 ; i < nbproc; i++) {
+      count_send[i] = taille_chunk * m->ncols;
+      count_send[i] += ((i) <= reste ? m->ncols : 0);
+      displacements[i] = displacements[i-1] + ( i > 1 ? count_send[i-1] : 0);
     }
+    MPI_Scatterv(m->terrain, count_send, displacements, MPI_FLOAT, NULL, 0, MPI_FLOAT, 0, MPI_COMM_WORLD);
+  } else { 
+    
+    taille_chunk += (reste >= rank ? 1 : 0);
+    MPI_Scatterv(NULL , NULL , NULL , MPI_FLOAT, m->terrain , taille_chunk * m->ncols , MPI_FLOAT , 0 , MPI_COMM_WORLD);
   }
-  else{
-    //Les processus de rang reste ou moins traiteront une ligne de plus, si nbRows % nbProc != 0
-    taille_chunk += (reste >= rank ? 1 : 0); 
-    MPI_Recv(m->terrain , taille_chunk *  m->ncols , MPI_FLOAT , 0 , 0 , MPI_COMM_WORLD , NULL);
-  } 
-
+  //printTerrain(m, rank);
   return(m);
 }
-
-// void sendToMaster(float * W, int  nrows , mnt *m ){
-//   int rank ; 
-//   int nbproc = 0; 
-  
-//   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-//   MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
-
-  
-
-//   float *  Wp = W  ;
-//   if(!rank){
-//     for(int i = 0 ; i < nbproc -1 ; i ++){
-//       int taille_chunk = m->nrows  / (nbproc-1) ;
-//       int reste = m->nrows  % (nbproc-1) ;
-//       taille_chunk += (reste >= i ? 1 : 0);
-//       nrows += taille_chunk;
-//       MPI_Recv(Wp ,(nrows)*m->ncols, MPI_FLOAT, i, 0, MPI_COMM_WORLD, NULL);
-//       Wp+=2;
-//     } 
-//   }else{
-//     Wp +=1 ;
-//     MPI_Ssend(Wp, (m->nrows-2)*m->ncols, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-//   }     
-// }
 
 void mnt_write(mnt *m, FILE *f)
 {

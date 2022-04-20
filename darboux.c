@@ -15,6 +15,8 @@
 // pour accéder à un tableau de flotant linéarisé (ncols doit être défini) :
 #define WTERRAIN(w,i,j) (w[(i)*ncols+(j)])
 
+
+
 // calcule la valeur max de hauteur sur un terrain
 float max_terrain(const mnt *restrict m)
 {
@@ -53,21 +55,22 @@ float *init_W(const mnt *restrict m)
 float *init_W_kernel(const mnt *restrict m, float gmax){
   
   float *restrict W;
-  const int ncols = m->ncols ; 
-  const int nrows = m->nrows + 2 ; 
-  CHECK((W = calloc( ncols * nrows ,  sizeof(float))) != NULL);
+  // const int ncols = m->ncols ; 
+  // const int nrows = m->nrows + 2 ; 
+  // CHECK((W = calloc( ncols * nrows ,  sizeof(float))) != NULL);
   
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   int nbproc ; 
   MPI_Comm_size(MPI_COMM_WORLD, &nbproc); 
 
-  //On prend la valeur maximale globale du mnt
-  const float max = gmax;
-
   //traitement différent selon le processus, pour respecter la "bordure" de W initial
   if (rank == 1) {
-      for(int i = 1 ; i < nrows - 1; i++)
+    const int ncols = m->ncols ; 
+    const int nrows = m->nrows + 1 ; 
+    CHECK((W = calloc( ncols * nrows ,  sizeof(float))) != NULL);
+
+      for(int i = 0 ; i < nrows - 1; i++)
       {
         for(int j = 0 ; j < ncols ; j++)
         {
@@ -75,23 +78,29 @@ float *init_W_kernel(const mnt *restrict m, float gmax){
             WTERRAIN(W,i,j) = TERRAIN(m,i-1,j);
           } 
           else
-            WTERRAIN(W,i,j) = max;
+            WTERRAIN(W,i,j) = gmax;
         }
       }
     }
     else if (rank == nbproc - 1) {
-      for(int i = 1; i < nrows-1; i++)
+      const int ncols = m->ncols ; 
+      const int nrows = m->nrows + 1 ; 
+      CHECK((W = calloc( ncols * nrows ,  sizeof(float))) != NULL);
+      for(int i = 1; i < nrows; i++)
       {
         for(int j = 0 ; j < ncols ; j++)
         {
           if(i==nrows-2 || j==0||  j==ncols-1 || TERRAIN(m,i-1,j) == m->no_data)
             WTERRAIN(W,i,j) = TERRAIN(m,i-1,j);
           else
-            WTERRAIN(W,i,j) = max;
+            WTERRAIN(W,i,j) = gmax;
         }
       }
     }
     else {
+      const int ncols = m->ncols ; 
+      const int nrows = m->nrows + 2 ; 
+      CHECK((W = calloc( ncols * nrows ,  sizeof(float))) != NULL);
      for(int i = 1; i < nrows-1; i++)
       {
         for(int j = 0 ; j < ncols ; j++)
@@ -99,7 +108,7 @@ float *init_W_kernel(const mnt *restrict m, float gmax){
           if(j==0||  j==ncols-1 || TERRAIN(m,i-1,j) == m->no_data)
             WTERRAIN(W,i,j) = TERRAIN(m,i-1,j);
           else
-            WTERRAIN(W,i,j) = max;
+            WTERRAIN(W,i,j) = gmax;
         }
       }
     }
@@ -150,11 +159,12 @@ int calcul_Wij(float *restrict W, const float *restrict Wprec, const mnt *m, con
   if(WTERRAIN(Wprec,i,j) > TERRAIN(m,i,j))
   {
     // parcourir les 8 voisins haut/bas + gauche/droite
+    printf("\ni:%i, j:%i\n", i, j);
     for(int v=0; v<8; v++)
     {
-      const int n1=  i + VOISINS[v][0];
+      const int n1 = i + VOISINS[v][0];
       const int n2 = j + VOISINS[v][1];
-      //printf("proc %i val n1 %i n2 %i nrows %i ncols %i\n",rank , n1, n2,nrows,ncols);
+      printf("proc %i val n1 %i n2 %i nrows %i ncols %i\n",rank , n1, n2,nrows,ncols);
 
       // vérifie qu'on ne sort pas de la grille.
       // ceci est théoriquement impossible, si les bords de la matrice Wprec
@@ -280,24 +290,52 @@ mnt *darboux(const mnt *restrict m)
         //printf("%i<-%i\n",rank,rank+1);
       }
         
-      
       Wp -= ncols * (nrows-1);
       if(rank != 1){
         MPI_Recv(Wp ,ncols, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, NULL);
         //printf("%i<-%i\n",rank,rank-1);
+      }
+      if(rank == 1){
+        for(int i=0 ; i < nrows-1;  i++)
+        {
+          for(int j=0; j < ncols; j++)
+          {
+            // calcule la nouvelle valeur de W[i,j]
+            // en utilisant les 8 voisins de la position [i,j] du tableau Wprec
+            //printf("Mon nombre de lignes : %i et colonnes : %i Proc %i \n",m->nrows,m->ncols,rank);
+            if(rank == 1){
+              printW(Wprec,nrows,ncols,rank, rank);
+              printW(W,nrows,ncols,rank, rank);
+            }
+            localModif |= calcul_Wij(W, Wprec, m, i, j);
+          }
+        } 
+      }else if(rank == nbproc-1){
+        for(int i=1 ; i < nrows;  i++)
+        {
+          for(int j=0; j < ncols; j++)
+          {
+            // calcule la nouvelle valeur de W[i,j]
+            // en utilisant les 8 voisins de la position [i,j] du tableau Wprec
+            //printf("Mon nombre de lignes : %i et colonnes : %i Proc %i \n",m->nrows,m->ncols,rank);
+            localModif |= calcul_Wij(W, Wprec, m, i, j);
+          }
+        } 
+      }else{
+        for(int i=1 ; i < nrows-1;  i++)
+        {
+          for(int j=0; j < ncols; j++)
+          {
+            // calcule la nouvelle valeur de W[i,j]
+            // en utilisant les 8 voisins de la position [i,j] du tableau Wprec
+            //printf("Mon nombre de lignes : %i et colonnes : %i Proc %i \n",m->nrows,m->ncols,rank);
+            localModif |= calcul_Wij(W, Wprec, m, i, j);
+          }
+        } 
       }        
       
-      for(int i=1 ; i < nrows-1;  i++)
-      {
-        for(int j=0; j < ncols; j++)
-        {
-          // calcule la nouvelle valeur de W[i,j]
-          // en utilisant les 8 voisins de la position [i,j] du tableau Wprec
-          //printf("Mon nombre de lignes : %i et colonnes : %i Proc %i \n",m->nrows,m->ncols,rank);
-          localModif |= calcul_Wij(W, Wprec, m, i, j);
-        }
-      } 
-      printf("modif proc %i : %i \n",rank, localModif);
+      
+      //printf("modif proc %i : %i \n",rank, localModif);
       Wp += ncols * (nrows - 2);
       if (rank != nbproc - 1){
         MPI_Ssend(Wp, ncols, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD);
@@ -306,7 +344,7 @@ mnt *darboux(const mnt *restrict m)
         
       
       #ifdef DARBOUX_PPRINTT
-      printf("Je suis le proc %i est je print : \n",rank);
+      //printf("Je suis le proc %i est je print : \n",rank);
     /////////  //dpprint();
       #endif
 
@@ -321,13 +359,13 @@ mnt *darboux(const mnt *restrict m)
     MPI_Reduce(&localModif,&modif, 1, MPI_INT,MPI_SUM, 0, MPI_COMM_WORLD) ; 
     MPI_Bcast(&modif, 1, MPI_INT, 0 , MPI_COMM_WORLD);
   }
-   // fin du while principal
-  //On envoie les valeurs des lignes de W au processus 0
-
+   // fin du while principal 
+ 
+  //On envoie les valeurs des lignes de W au processus 0  
   int* displs = (int *)malloc((nbproc - 1 ) * sizeof(int));
   int* counts_recv = (int *) malloc((nbproc - 1) * sizeof(int));
   // fin du calcul, le résultat se trouve dans W
-  if(rank == 0 ){
+  if(!rank){
     for(int i = 0 ; i < nbproc - 1 ; i++){
       int taille_chunk = m->nrows  / (nbproc-1) ;
       int reste = m->nrows  % (nbproc-1) ;
@@ -336,9 +374,9 @@ mnt *darboux(const mnt *restrict m)
       counts_recv[i] = taille_chunk * ncols;
     }
   }
-  
+  //
   if (!rank) {
-    MPI_Gatherv(W , (m->nrows-2)* m->ncols , MPI_FLOAT , W ,counts_recv , displs , MPI_FLOAT , 0 , MPI_COMM_WORLD);
+    MPI_Gatherv(NULL , 0 , MPI_FLOAT , W ,counts_recv , displs , MPI_FLOAT , 0 , MPI_COMM_WORLD);
   } else {
     //Gatherv des senders
     MPI_Gatherv(W , (m->nrows-2)* m->ncols , MPI_FLOAT , NULL,  NULL, NULL , MPI_FLOAT , 0 , MPI_COMM_WORLD);
@@ -349,7 +387,6 @@ mnt *darboux(const mnt *restrict m)
   
   mnt *res;
   // crée la structure résultat et la renvoie
-  
   if (!rank){
     
     CHECK((res=malloc(sizeof(*res))) != NULL);

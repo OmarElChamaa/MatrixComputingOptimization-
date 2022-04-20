@@ -7,6 +7,10 @@
 #include "io.h"
 #include "darboux.h"
 
+
+//POur calculer le temps d'execution 
+#define DIFFTEMPS(a,b) (((b).tv_sec - (a).tv_sec) + ((b).tv_usec - (a).tv_usec)/1000000.)
+
 int main(int argc, char **argv)
 {
   mnt *m, *d;
@@ -17,8 +21,12 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+  //Mesure de performances 
+  struct timeval tv_init, tv_begin, tv_end;
+	gettimeofday( &tv_init, NULL);
 
 
+  gettimeofday( &tv_begin, NULL);
   //INIT MPI 
   MPI_Init(&argc,&argv);
 
@@ -50,8 +58,10 @@ int main(int argc, char **argv)
    }
       
 
-
-    
+  gettimeofday( &tv_end, NULL);
+  printf("Init : %lfs, Compute : %lfs\n",
+          DIFFTEMPS(tv_init,tv_begin),
+          DIFFTEMPS(tv_begin,tv_end));
   
 
   // free
