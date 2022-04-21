@@ -20,6 +20,13 @@ void printTerrain (mnt *m, int r){
   printf("\n");
 }
 
+//Décalage des valeurs de m d'une ligne, pour permettre la permission
+void rowShift (mnt *m){
+  for (int i = m->nrows * m->ncols; i>=0; i--) {
+    m->terrain[i+m->ncols] = m->terrain[i];
+  }
+}
+
 mnt *mnt_read(char *fname)
 {
   mnt *m;
@@ -66,7 +73,7 @@ mnt *mnt_read(char *fname)
 
   m->nrows = taille_chunk  + (rank < reste ? 1 : 0);
   if(rank)
-    CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
+    CHECK((m->terrain = malloc(m->ncols * (m->nrows + 1) * sizeof(float))) != NULL);
   //printf("%i rows dans p%i\n", m->nrows, rank);
   
 
@@ -86,9 +93,14 @@ mnt *mnt_read(char *fname)
   } else {   
     MPI_Scatterv(NULL , NULL , NULL , NULL, m->terrain , m->nrows * m->ncols , MPI_FLOAT , 0 , MPI_COMM_WORLD);
   }
-  
+  //On décale les valeurs de m d'une ligne
+  if (rank){
+    rowShift(m); 
+  }
+   
   //On modifie le nombre de rows dans m pour le traitement de calcul_wij, comme on ajoute des lignes supplémentaires
   m->nrows += ((!rank || rank == nbproc - 1) ? 1 : 2);
+
   return(m);
 }
 

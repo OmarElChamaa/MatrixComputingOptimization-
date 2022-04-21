@@ -17,11 +17,11 @@
 
 float max_terrain_kernel(const mnt *restrict m, int rank, int nbproc)
 {
-  float max = m->terrain[0];
+  float max = m->terrain[m->ncols];
   //Décalage selon le numéro du processus
   int stride = ((!rank || rank == nbproc -1) ? 1 : 2);
   int nrows = m->nrows - stride;
-  for(int i = (rank ? 1 : 0) ; i < m->ncols * nrows ; i++)
+  for(int i = m->ncols ; i < m->ncols * nrows ; i++)
     if(m->terrain[i] > max)
       max = m->terrain[i];
   return(max);
@@ -66,9 +66,6 @@ float *init_W(const mnt *restrict m)
 float *init_W_kernel(const mnt *restrict m, float gmax){
   
   float *restrict W;
-  // const int ncols = m->ncols ; 
-  // const int nrows = m->nrows + 2 ; 
-  // CHECK((W = calloc( ncols * nrows ,  sizeof(float))) != NULL);
   
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -161,16 +158,16 @@ int calcul_Wij(float *restrict W, const float *restrict Wprec, const mnt *m, con
   // on prend la valeur précédente...
   WTERRAIN(W,i,j) = WTERRAIN(Wprec,i,j);
   // ... sauf si :
-  printf("Wterrain:%f , Terrain:%f\n",WTERRAIN(Wprec, i, j), TERRAIN(m,i,j));
+  
   if(WTERRAIN(Wprec,i,j) > TERRAIN(m,i,j))
   {
     // parcourir les 8 voisins haut/bas + gauche/droite
-    printf("\ni:%i, j:%i\n", i, j);
     for(int v=0; v<8; v++)
     {
       const int n1 = i + VOISINS[v][0];
       const int n2 = j + VOISINS[v][1];
-      printf("proc %i val n1 %i n2 %i nrows %i ncols %i\n",rank , n1, n2,nrows,ncols);
+      //printf("Rank %i Wterrain:%f , Terrain:%f\n",rank,WTERRAIN(Wprec, i, j), TERRAIN(m,i,j));
+      //printf("proc %i val n1 %i n2 %i nrows %i ncols %i\n",rank , n1, n2,nrows,ncols);
 
       // vérifie qu'on ne sort pas de la grille.
       // ceci est théoriquement impossible, si les bords de la matrice Wprec
@@ -215,7 +212,7 @@ int calcul_Wij(float *restrict W, const float *restrict Wprec, const mnt *m, con
 
 
 
-void printW(float *w,int nrows, int ncols, int rank, int v){
+void printW(float *w,int nrows, int ncols, int rank){
   printf("*********** %i ***********\n", rank);
   for(int i = 0 ; i < nrows; i++){
       for(int j = 0 ; j < ncols ; j++){
@@ -223,10 +220,7 @@ void printW(float *w,int nrows, int ncols, int rank, int v){
       }
       printf("\n");  
     }
-    if (!v)
       printf("*********** /%i ************\n",rank);  
-    
-    if (!v)
       printf("\n\n");
 }
 
@@ -248,7 +242,6 @@ mnt *darboux(const mnt *restrict m)
   //nrows correspond à la longueur de W, avec les 2 lignes supplémentaires inclus
   const int ncols = m->ncols ; 
   const int nrows = m->nrows ;
-  printf("p%i:nrows=%i\n",rank,nrows);
   // initialisation
   float *restrict W, *restrict Wprec;
   //On initialise W et Wprec avec 2 lignes supplémentaires, qui sont celles des processus suivant et précédant
@@ -259,9 +252,8 @@ mnt *darboux(const mnt *restrict m)
   MPI_Allreduce(&maxLocal, &maxGlobal, 1, MPI_FLOAT, MPI_MAX, MPI_COMM_WORLD);
 
   Wprec = init_W_kernel(m,maxGlobal);
-  printW(Wprec,nrows,ncols,rank, rank);
-    
-    
+  
+  
   //Pointeur temporaire, utilisé pour l'envoi de ligne
   float *restrict Wp; 
   
@@ -269,6 +261,7 @@ mnt *darboux(const mnt *restrict m)
   int modif = 1;  
 
   while(modif){
+    
     modif = 0;
     
     Wp = Wprec;
@@ -283,7 +276,6 @@ mnt *darboux(const mnt *restrict m)
     if (rank != 0) {
       Wp = Wprec + ncols;    
       MPI_Ssend(Wp, ncols, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD);
-      printf("%i->%i\n",rank, rank-1);  
       Wp = Wprec;
     }
 
@@ -291,13 +283,11 @@ mnt *darboux(const mnt *restrict m)
     if (rank != nbproc - 1){
       Wp = Wprec + ncols*(nrows-1) ;
       MPI_Recv(Wp,ncols, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD, NULL);
-      printf("%i<-%i\n",rank,rank+1);
     }
 
     //reception ligne prec calculee  
     if(rank != 0){
-      MPI_Recv(Wprec ,ncols, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, NULL);
-      printf("%i<-%i\n",rank,rank-1);
+      MPI_Recv(Wprec, ncols, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, NULL);
     }
 
 
@@ -311,31 +301,35 @@ mnt *darboux(const mnt *restrict m)
           //printf("Mon nombre de lignes : %i et colonnes : %i Proc %i \n",m->nrows,m->ncols,rank);
           localModif |= calcul_Wij(W, Wprec, m, i, j);
         }
-      } 
+        
+      }      
     }else if(rank == nbproc-1){
-      for(int i=1 ; i < nrows;  i++)
-      {
-        for(int j=0; j < ncols; j++)
-        {
-          localModif |= calcul_Wij(W, Wprec, m, i, j);
-        }
-      } 
-    }else{
+
       for(int i=1 ; i < nrows-1;  i++)
       {
         for(int j=0; j < ncols; j++)
         {
           localModif |= calcul_Wij(W, Wprec, m, i, j);
         }
+      
+      } 
+   
+      }else{
+      for(int i=1 ; i < nrows-2;  i++)
+      {
+        for(int j=0; j < ncols; j++)
+        {
+          localModif |= calcul_Wij(W, Wprec, m, i, j);
+        }
+       
       } 
     }
     
     //printf("modif proc %i : %i \n",rank, localModif);
     //Envoi de la dernière ligne, calculée
     if (rank != nbproc - 1){
-      Wp = Wprec + ncols * (nrows - 2);
+      Wp = W + ncols * (nrows - 2);
       MPI_Ssend(Wp, ncols, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD);
-      printf("%i->%i\n",rank, rank+1);
     }
       
     
@@ -351,37 +345,53 @@ mnt *darboux(const mnt *restrict m)
     Wprec = tmp;
   
     //Réduction de la variable modif et envoie aux autres processus
-    
-    MPI_Reduce(&localModif,&modif, 1, MPI_INT,MPI_SUM, 0, MPI_COMM_WORLD) ; 
-    MPI_Bcast(&modif, 1, MPI_INT, 0 , MPI_COMM_WORLD);
+    MPI_Allreduce(&localModif, &modif, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
   }
    // fin du while principal 
-  printf("Fin while wouhou !!!!!!!!!!!!!!!!!!!!!!!! \n");
+
   //On envoie les valeurs des lignes de W au processus 0  
-  int* displs = (int *)malloc((nbproc - 1 ) * sizeof(int));
-  int* counts_recv = (int *) malloc((nbproc - 1) * sizeof(int));
-  // fin du calcul, le résultat se trouve dans W
+  
   if(!rank){
-    for(int i = 0 ; i < nbproc - 1 ; i++){
-      int taille_chunk = m->nrows  / (nbproc-1) ;
-      int reste = m->nrows  % (nbproc-1) ;
-      taille_chunk += (reste >= i ? 1 : 0);
-      displs[i] = taille_chunk * ncols; 
-      counts_recv[i] = taille_chunk * ncols;
+    int* displs = (int *) malloc(nbproc * sizeof(int));
+    int* counts_recv =(int *) malloc(nbproc  * sizeof(int));
+
+    // fin du calcul, le résultat se trouve dans W
+    int taille_chunk = m->nrowsTemp / nbproc ;
+    int reste = m->nrowsTemp  % nbproc ;
+    displs[0] = 0 ;
+    counts_recv[0] = taille_chunk * (ncols + (reste > 0 ? 1 : 0));
+
+    //printf("nrows %i, taille chunk %i \n reste %i\n count %i disp is %i\n",m->nrowsTemp ,taille_chunk, reste ,counts_recv[0],displs[0]) ; 
+    for(int i = 1 ; i < nbproc  ; i++){
+      int stride = (reste > i ? 1 : 0) ;
+      displs[i] = displs[i-1] + taille_chunk * (ncols + stride) ;
+      counts_recv[i] = taille_chunk * (ncols + stride) ;
+      printf(" i is %i , count %i disp is %i\n",i,counts_recv[i],displs[i]) ; 
     }
-  }
-  //
-  if (!rank) {
-    MPI_Gatherv(NULL , 0 , MPI_FLOAT , W ,counts_recv , displs , MPI_FLOAT , 0 , MPI_COMM_WORLD);
+    float* restrict Wres;
+    CHECK((Wres = malloc(ncols * m->nrowsTemp * sizeof(float))) != NULL);  
+    printf("nb données recup : %i; nb données envoyées:%i\n",m->nrowsTemp *m->ncols, (m->nrows-1)*m->ncols);
+    MPI_Gatherv(W , (m->nrows-1) * m->ncols , MPI_FLOAT , Wres , counts_recv , displs , MPI_FLOAT , 0 , MPI_COMM_WORLD);
   } else {
     //Gatherv des senders
-    MPI_Gatherv(W , (m->nrows-2)* m->ncols , MPI_FLOAT , NULL,  NULL, NULL , MPI_FLOAT , 0 , MPI_COMM_WORLD);
+    if(rank == 1){
+      printW(W,m->nrows,m->ncols,rank);
+    }
+    W += ncols;
+    if(rank == 1){
+      printW(W,m->nrows,m->ncols,rank);
+    }
+    int ndata = (rank == nbproc - 1 ? 1 : 2) ; 
+    printf("envoi de p%i : %idonnées\n",rank, (m->nrows-ndata)*m->ncols);
+    MPI_Gatherv(W , (m->nrows-ndata)* m->ncols , MPI_FLOAT , NULL,  NULL, NULL , MPI_FLOAT , 0 , MPI_COMM_WORLD);
   }
-  
+  if (!rank)
+   printW(W,m->nrowsTemp,ncols,rank); 
 
-  free(Wprec);
-  
-  mnt *res;
+
+
+  free(Wprec);  
+  mnt *res = NULL;
   // crée la structure résultat et la renvoie
   if (!rank){
     
@@ -391,4 +401,5 @@ mnt *darboux(const mnt *restrict m)
     
   }
   return(res);
+  
 }

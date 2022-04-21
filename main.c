@@ -20,13 +20,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "Usage: %s <input filename> [<output filename>]\n", argv[0]);
     exit(1);
   }
-
-  //Mesure de performances 
-  struct timeval tv_init, tv_begin, tv_end;
-	gettimeofday( &tv_init, NULL);
-
-
-  gettimeofday( &tv_begin, NULL);
+  
   //INIT MPI 
   MPI_Init(&argc,&argv);
 
@@ -34,6 +28,14 @@ int main(int argc, char **argv)
   int nbproc = 0; 
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
+
+  struct timeval tv_init, tv_begin, tv_end;
+  //Mesure de performances 
+  if(!rank){
+	  gettimeofday( &tv_init, NULL);
+    gettimeofday( &tv_begin, NULL);
+  }
+  
 
   // READ INPUT
   m = mnt_read(argv[1]);
@@ -44,24 +46,27 @@ int main(int argc, char **argv)
 
   
   // WRITE OUTPUT
-   if (rank){
-     FILE *out;
+  if (rank){
+      FILE *out;
     if(argc == 3)
       out = fopen(argv[2], "w");
-    else
+    else{
       out = stdout;
-    mnt_write(d, out);
+      mnt_write(d, out);
+    }
     if(argc == 3)
       fclose(out);
     else
       mnt_write_lakes(m, d, stdout);
-   }
+  }
       
-
-  gettimeofday( &tv_end, NULL);
-  printf("Init : %lfs, Compute : %lfs\n",
+  if(!rank){
+    gettimeofday( &tv_end, NULL);
+    printf("Init : %lfs, Compute : %lfs\n",
           DIFFTEMPS(tv_init,tv_begin),
           DIFFTEMPS(tv_begin,tv_end));
+  }
+  
   
 
   // free
