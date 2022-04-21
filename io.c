@@ -10,7 +10,7 @@
 void printTerrain (mnt *m, int r){
   for (int i = 0 ; i< m->nrows*m->ncols ; i++){
     printf(" %f ",m->terrain[i]);
-    if (!i%m->ncols)
+    if (i%m->ncols==0 && i != 0)
       printf("\n"); 
   }
   
@@ -84,7 +84,7 @@ mnt *mnt_read(char *fname)
     taille_chunk += (reste >= rank ? 1 : 0);
     MPI_Scatterv(NULL , NULL , NULL , MPI_FLOAT, m->terrain , taille_chunk * m->ncols , MPI_FLOAT , 0 , MPI_COMM_WORLD);
   }
-  //printTerrain(m, rank);
+  printTerrain(m, rank);
   return(m);
 }
 
