@@ -36,17 +36,15 @@ int main(int argc, char **argv)
     gettimeofday( &tv_begin, NULL);
   }
   
-
   // READ INPUT
   m = mnt_read(argv[1]);
 
   // COMPUTE
-  
   d = darboux(m);
-
+  printf("fin darboux p%i\n",rank);
   
   // WRITE OUTPUT
-  if (rank){
+  if (!rank){
       FILE *out;
     if(argc == 3)
       out = fopen(argv[2], "w");
@@ -58,22 +56,23 @@ int main(int argc, char **argv)
       fclose(out);
     else
       mnt_write_lakes(m, d, stdout);
-  }
-      
-  if(!rank){
+
     gettimeofday( &tv_end, NULL);
     printf("Init : %lfs, Compute : %lfs\n",
           DIFFTEMPS(tv_init,tv_begin),
           DIFFTEMPS(tv_begin,tv_end));
   }
-  
-  
-
+      
   // free
   free(m->terrain);
   free(m);
-  free(d->terrain);
-  free(d);
+  
+  if (!rank) {
+    free(d->terrain);
+    free(d);
+    
+  }
   MPI_Finalize();
+   
   return(0);
 }

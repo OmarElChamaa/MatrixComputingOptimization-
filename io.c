@@ -100,7 +100,6 @@ mnt *mnt_read(char *fname)
    
   //On modifie le nombre de rows dans m pour le traitement de calcul_wij, comme on ajoute des lignes supplémentaires
   m->nrows += ((!rank || rank == nbproc - 1) ? 1 : 2);
-
   return(m);
 }
 
@@ -115,7 +114,7 @@ void mnt_write(mnt *m, FILE *f)
   fprintf(f, "%.2f\n", m->cellsize);
   fprintf(f, "%.2f\n", m->no_data);
 
-  for(int i = 0 ; i < m->nrows ; i++)
+  for(int i = 0 ; i < m->nrowsTemp ; i++)
   {
     for(int j = 0 ; j < m->ncols ; j++)
     {
@@ -129,7 +128,7 @@ void mnt_write_lakes(mnt *m, mnt *d, FILE *f)
 {
   CHECK(f != NULL);
 
-  for(int i = 0 ; i < m->nrows ; i++)
+  for(int i = 0 ; i < m->nrowsTemp ; i++)
   {
     for(int j = 0 ; j < m->ncols ; j++)
     {
