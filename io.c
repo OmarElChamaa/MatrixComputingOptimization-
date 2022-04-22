@@ -6,20 +6,6 @@
 #include "io.h"
 
 
-
-void printTerrain (mnt *m, int r){
-  printf("\n***************************************** Je suis le p %d\n",r);
-  for (int i = 0 ; i< m->nrows*m->ncols ; i++){
-    printf(" %f ",m->terrain[i]);
-    if ((i+1)%m->ncols==0)
-      printf("\n"); 
-  }
-  
-  printf("\n***************************************** /Je suis le p %d\n",r);
-
-  printf("\n");
-}
-
 //Décalage des valeurs de m d'une ligne, pour permettre la permission
 void rowShift (mnt *m){
   for (int i = m->nrows * m->ncols; i>=0; i--) {
@@ -47,15 +33,12 @@ mnt *mnt_read(char *fname)
     CHECK(fscanf(f, "%f", &m->yllcorner) == 1);
     CHECK(fscanf(f, "%f", &m->cellsize) == 1);
     CHECK(fscanf(f, "%f", &m->no_data) == 1);
-
-    /* calcul ici */
-  
-  
     CHECK((m->terrain = malloc(m->ncols * m->nrows * sizeof(float))) != NULL);
     
+    //Calcul de la répartition des lignes par processus
     taille_chunk = m->nrows  / (nbproc) ;
     reste = m->nrows  % (nbproc) ;  
-    //#pragma omp parallel for 
+    #pragma omp parallel for schedule(dynamic,1)
     for(int i = 0 ; i < m->ncols * m->nrows ; i++)
     {
       CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
@@ -75,9 +58,6 @@ mnt *mnt_read(char *fname)
   m->nrows = taille_chunk  + (rank < reste ? 1 : 0);
   if(rank)
     CHECK((m->terrain = malloc(m->ncols * (m->nrows + 1) * sizeof(float))) != NULL);
-  //printf("%i rows dans p%i\n", m->nrows, rank);
-  
-
 
   //Préparation du scatter des données de m->terrrain
   int* count_send = malloc(nbproc*sizeof(int));
@@ -88,7 +68,6 @@ mnt *mnt_read(char *fname)
       count_send[i] = taille_chunk * m->ncols;
       count_send[i] += (i < reste ? m->ncols : 0);
       displacements[i] = (i == 0 ? 0 : displacements[i-1] + count_send[i-1]);
-      //printf("%i:%i, count send is %i \n",i,displacements[i],count_send[i]);
     } 
 
     MPI_Scatterv(m->terrain, count_send, displacements, MPI_FLOAT, MPI_IN_PLACE, m->nrows * m->ncols, MPI_FLOAT, 0, MPI_COMM_WORLD);

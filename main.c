@@ -36,6 +36,9 @@ int main(int argc, char **argv)
 
 
   struct timeval tv_init, tv_begin, tv_end;
+  double start ; 
+  double  end ; 
+
   //Mesure de performances 
   if(!rank){
 	  gettimeofday( &tv_init, NULL);
@@ -47,6 +50,11 @@ int main(int argc, char **argv)
   if(!rank){
     gettimeofday( &tv_end, NULL);
    
+  }
+
+  if(!rank){
+    start = DIFFTEMPS(tv_init,tv_begin) ; 
+    end = DIFFTEMPS(tv_begin,tv_end) ;
   }
   
   // WRITE OUTPUT
@@ -60,17 +68,12 @@ int main(int argc, char **argv)
     }
     if(argc == 3)
       fclose(out);
-    //else
-      //mnt_write_lakes(m, d, stdout);
-
-    
+    else
+      mnt_write_lakes(m, d, stdout);
   }
 
-  if(!rank){
-     printf("Init : %lfs, Compute : %lfs\n",
-          DIFFTEMPS(tv_init,tv_begin),
-          DIFFTEMPS(tv_begin,tv_end));
-  }
+  if(!rank)
+    printf("Init time = %lfs , Compute = %lfs \n",start,end);
       
   // free
   free(m->terrain);
