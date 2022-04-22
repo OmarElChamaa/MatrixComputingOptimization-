@@ -40,6 +40,7 @@ float max_terrain(const mnt *restrict m)
 
 
 
+
 // initialise le tableau W de départ à partir d'un mnt
 float *init_W(const mnt *restrict m)
 {
@@ -275,7 +276,7 @@ mnt *darboux(const mnt *restrict m)
     localModif = 0; // sera mis à 1 s'il y a une modification
     //1er : envoi de sa première ligne au précédant (sauf p = 1)
     //2eme : réception de sa ligne suivante, non calculée (sauf p = n - 1)
-    //3eme : réception de sa ligne précédante, calculée (sauf p = 1)
+    //3eme : réception de sa ligne précédente, calculée (sauf p = 1)
     //4eme : calcul jusqu'a dernière ligne 
     //5eme : envoi de sa dernière ligne au suivant (sauf p = n - 1)
     
@@ -368,11 +369,13 @@ mnt *darboux(const mnt *restrict m)
       int stride = (reste > i ? 1 : 0) ;
       displs[i] = displs[i-1] + taille_chunk * (ncols + stride) ;
       counts_recv[i] = taille_chunk * (ncols + stride) ;
-      printf(" i is %i , count %i disp is %i\n",i,counts_recv[i],displs[i]) ; 
+      //printf(" i is %i , count %i disp is %i\n",i,counts_recv[i],displs[i]) ; 
     }
     
     CHECK((Wres = malloc(ncols * m->nrowsTemp * sizeof(float))) != NULL);  
+    //printf("taille de wres : %i\n", m->nrowsTemp * ncols);
     MPI_Gatherv(W , (m->nrows-1) * m->ncols , MPI_FLOAT , Wres , counts_recv , displs , MPI_FLOAT , 0 , MPI_COMM_WORLD);
+    printW(Wres,m->nrowsTemp,ncols,rank);
   } else {
     //Gatherv des senders
     //Décalage  w

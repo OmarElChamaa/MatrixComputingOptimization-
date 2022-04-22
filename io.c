@@ -55,6 +55,7 @@ mnt *mnt_read(char *fname)
     
     taille_chunk = m->nrows  / (nbproc) ;
     reste = m->nrows  % (nbproc) ;  
+    //#pragma omp parallel for 
     for(int i = 0 ; i < m->ncols * m->nrows ; i++)
     {
       CHECK(fscanf(f, "%f", &m->terrain[i]) == 1);
@@ -81,6 +82,7 @@ mnt *mnt_read(char *fname)
   //Préparation du scatter des données de m->terrrain
   int* count_send = malloc(nbproc*sizeof(int));
   int* displacements = malloc(nbproc*sizeof(int));
+  
   if (!rank) {
     for (int i = 0 ; i < nbproc; i++) {
       count_send[i] = taille_chunk * m->ncols;

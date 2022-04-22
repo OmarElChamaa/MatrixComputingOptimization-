@@ -13,7 +13,7 @@ typedef struct mnt_t
   int ncols, nrows;                   // size
   float xllcorner, yllcorner, cellsize; // not used
   float no_data; // mnt value unknown
-  int nrowsTemp;            //POur savoir combie de rows wst attribuer au rang 0 et pas son nrows total             
+  int nrowsTemp;            //Permet de stocker la valeur initiale du nombre de ligne du mnt (pour P0)       
 
   float *terrain;                     // linear array (size: ncols*nrows)
 }

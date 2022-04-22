@@ -29,19 +29,25 @@ int main(int argc, char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
 
+  
+  
+  // READ INPUT
+  m = mnt_read(argv[1]);
+
+
   struct timeval tv_init, tv_begin, tv_end;
   //Mesure de performances 
   if(!rank){
 	  gettimeofday( &tv_init, NULL);
     gettimeofday( &tv_begin, NULL);
   }
-  
-  // READ INPUT
-  m = mnt_read(argv[1]);
-
   // COMPUTE
   d = darboux(m);
-  printf("fin darboux p%i\n",rank);
+
+  if(!rank){
+    gettimeofday( &tv_end, NULL);
+   
+  }
   
   // WRITE OUTPUT
   if (!rank){
@@ -50,15 +56,18 @@ int main(int argc, char **argv)
       out = fopen(argv[2], "w");
     else{
       out = stdout;
-      mnt_write(d, out);
+      //mnt_write(d, out);
     }
     if(argc == 3)
       fclose(out);
-    else
-      mnt_write_lakes(m, d, stdout);
+    //else
+      //mnt_write_lakes(m, d, stdout);
 
-    gettimeofday( &tv_end, NULL);
-    printf("Init : %lfs, Compute : %lfs\n",
+    
+  }
+
+  if(!rank){
+     printf("Init : %lfs, Compute : %lfs\n",
           DIFFTEMPS(tv_init,tv_begin),
           DIFFTEMPS(tv_begin,tv_end));
   }
